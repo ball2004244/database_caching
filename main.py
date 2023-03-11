@@ -3,26 +3,41 @@ Import PostgreSQL in Python
 '''
 import psycopg2 as sql
 
-connection = sql.connect(
-    database='testdatabase',
-    user='testuser',
-    password='12345678',
-    host='localhost',
-    port='5432'
-)
+class ConnectToPostgres():
+    def __init__(self):
+        self.connection = sql.connect(
+            database='testdatabase',
+            user='postgres',
+            password='12345678',
+            host='localhost',
+            port='5432'
+        )
 
-# create cursor
-cursor = connection.cursor() 
+        self.user_table = 'testschema.testtable'
 
-# excecute query
-query = 'SELECT * FROM testtable'
-cursor.execute(query)
+    def get_all_user(self):
+        try:
+            # create cursor
+            cursor = self.connection.cursor() 
 
-# fetch result
-result = cursor.fetchall()
+            # excecute query
+            query = f'SELECT * FROM {self.user_table}'
+            cursor.execute(query)
 
-for row in result:
-    print(row)
+            # fetch result
+            result = cursor.fetchall()
 
-cursor.close()
-connection.close()
+            for row in result:
+                print(row)
+
+        except: 
+            print('Cannot query data')
+        finally:
+            cursor.close()
+    def end_connect(self):
+        self.connection.close()
+
+if __name__ == '__main__':
+    database = ConnectToPostgres()
+    database.get_all_user()
+    database.end_connect()
