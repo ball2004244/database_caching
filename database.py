@@ -15,7 +15,7 @@ class ConnectToPostgres():
     def get_user(self, id):
         try:
             # create cursor
-            cursor = self.connection.cursor() 
+            cursor = self.connection.cursor()
 
             # excecute query
             query = f'SELECT * FROM {self.user_table} WHERE id=%s'
@@ -28,11 +28,7 @@ class ConnectToPostgres():
 
         except: 
             print('Cannot query data')
-
-        finally:
-            cursor.close()
-            self.connection.close()
-            
+        
     def get_all_user(self):
         try:
             cursor = self.connection.cursor() 
@@ -41,7 +37,7 @@ class ConnectToPostgres():
             cursor.execute(query)
 
             result = cursor.fetchall()
-
+            cursor.close()
             result = {id: 
                       {'name': name, 
                        'address': address, 
@@ -53,9 +49,6 @@ class ConnectToPostgres():
         except: 
             print('Cannot query data')
 
-        finally:
-            cursor.close()
-            self.connection.close()
 
     def create_user(self, id, name, address, phonenum):
         try:
@@ -63,37 +56,49 @@ class ConnectToPostgres():
             cursor = self.connection.cursor()
 
             # excecute query
-            query = f'INSERT INTO {self.user_table} (id, name, address, phonenum) VALUES (%s, %s, %s, %s)'
+            query = f'INSERT INTO {self.user_table} (id, name, address, phone_number) VALUES (%s, %s, %s, %s)'
             cursor.execute(query, (int(id), name, address, phonenum))
 
             # commit to database
             self.connection.commit()
-
-        except:
-            print('Cannot insert data')
-
-        finally:
             cursor.close()
-            self.connection.close()
+            
+        except Exception as e:
+            print('Cannot insert data')
+            print(e)
 
-    def update_user(self, id, name, address, phonenum):
+    def update_user(self, data):
         try:
+            # data manipulation
+            id = data['id']
+            name = data['name']
+            address = data['address']
+            phonenum = data['phonenum']
+
             # create cursor
             cursor = self.connection.cursor()
 
+            # check if id exist, if not, navigate to create_user
+            query = f'SELECT * FROM {self.user_table} WHERE id=%s'
+            cursor.execute(query, (int(id),))
+            result = cursor.fetchone()
+
+            if result == None:
+                self.create_user(id, name, address, phonenum)
+                return
+            
+
             # excecute query
-            query = f'UPDATE {self.user_table} SET name=%s, address=%s, phonenum=%s WHERE id=%s'
+            query = f'UPDATE {self.user_table} SET name=%s, address=%s, phone_number=%s WHERE id=%s'
             cursor.execute(query, (name, address, phonenum, int(id)))
 
             # commit to database
             self.connection.commit()
-
-        except:
-            print('Cannot update data')
-
-        finally:
             cursor.close()
-            self.connection.close()
+
+        except Exception as e:
+            print('Cannot update data')
+            print(e)
     
     def delete_user(self, id):
         try:
@@ -106,15 +111,18 @@ class ConnectToPostgres():
 
             # commit to database
             self.connection.commit()
-
+            cursor.close()
         except:
             print('Cannot delete data')
 
-        finally:
-            cursor.close()
-            self.connection.close()
+    def close_connection(self):
+        self.connection.close()
 
 database = ConnectToPostgres()
 
 if __name__ == '__main__':
-    database.get_all_user()
+    # users = database.get_all_user()
+    # database.create_user(9, 'test', 'test', 'test')
+    database.update_user({'id': 14, 'name': 'test', 'address': 'test', 'phonenum': 'n0_test'})
+
+    # database.close_connection()

@@ -1,6 +1,7 @@
 import redis
 import json 
 from database import database
+import threading
 
 class ConnectToRedis():
     def __init__(self, host="localhost", port=6379, db=0):
@@ -8,6 +9,7 @@ class ConnectToRedis():
         self.port = port
         self.db = db
         self.connection = self.connect_to_redis()
+        self.close_server = False
 
     def connect_to_redis(self):
         return redis.Redis(host=self.host, port=self.port, db=self.db)
@@ -15,7 +17,7 @@ class ConnectToRedis():
     '''
         CRUD between Postgres and Redis
     '''
-    def get_user_from_database(self):
+    def get_all_users_from_database(self):
         # get data from Postgres and store it in Redis
         try:
             users = database.get_all_user()
@@ -31,15 +33,9 @@ class ConnectToRedis():
             print(e)
             return None
     
-    def add_user_to_database(self, new_data):
-        # compare data between Redis and Postgres
-        # then update data in Postgres if there is any change
-        data = self.get_user_from_database()
-        if data != new_data:
-            name = new_data['name']
-            address = new_data['address']
-            phonenum = new_data['phonenum']
-            database.update_user(id, name, address, phonenum)
+    def add_user_to_database(self, id, name, address, phonenum):
+        # add data to Postgres
+        database.create_user(id, name, address, phonenum)
         pass
     
     def delete_user_from_database(self, id):
@@ -47,9 +43,13 @@ class ConnectToRedis():
         database.delete_user(id)
         pass 
 
-    def update_user_to_database(self, id, name, address, phonenum):
+    def update_user_to_database(self, all_data):
         # bring change from Redis to Postgres
-        database.update_user(id, name, address, phonenum)
+        for id, data in all_data.items():
+            sent_data = data 
+            sent_data['id'] = id
+            print(sent_data)
+            database.update_user(sent_data)
         pass
     
     '''
@@ -60,49 +60,52 @@ class ConnectToRedis():
         try:
             key = f'user:{id}'
             data = self.connection.get(key)
-            if not data:
-                data = self.get_user_from_database()
-                return data
-            else:
-                data = json.loads(data)
-                return data
+            data = json.loads(data)
+            return data
             
         except Exception as e:
             print(e)
             return None
     
-    def get_all_users(self):
+    def get_all_users_from_redis(self):
         # check if any user in Redis
-        # if not, get all data from Postgres and store it in Redis
-        # then return all data
-        # the user key is saved as f'user:id'
         try:
-            users = self.connection.keys('user:*')
-            if not users:
-                users = self.get_user_from_database()
-                return users
-            else:
-                output = {}
-                for user in users:
-                    data = self.connection.get(user)
-                    data = json.loads(data)
-                    output[user] = data
-                return output
+            all_data = {}
+            keys = self.connection.keys(pattern='user:*')
+            for key in keys:
+                data = self.connection.get(key) 
+                data = json.loads(data)
+
+                # decode key from bytes to int
+                key = int(key.decode('utf-8').split(':')[1])
+                all_data[key] = data
+            return all_data
             
         except Exception as e:
             print(e)
             return None
     
     def add_user_to_redis(self, id, name, address, phonenum):
-        # compare date between client and Redis
-        # if the exact data exists in Redis, return None
-        # else, add data to Redis
-        self.connection.set(id, (name, address, phonenum))
+        raw_data = {
+            'name': name,
+            'address': address,
+            'phonenum': phonenum
+        }
+
+        # convert data to json
+        data = json.dumps(raw_data)
+        self.connection.set(id, data)
+
         pass
 
     def update_user_in_redis(self, id, name, address, phonenum):
         # update data in Redis
-        self.connection.set(id, (name, address, phonenum))
+        data = {
+            'name': name,
+            'address': address,
+            'phonenum': phonenum
+        }
+        self.connection.set(id, data)
         pass
 
     def delete_user_from_redis(self, id):
@@ -121,30 +124,48 @@ class ConnectToRedis():
         do this using Redis built-in timer
     '''
     def update_data(self):
-        # update data in Postgres after 60s
-        # create a timer in Redis and set to 60s
-        # check if timer is expired
-        # if it is, then loop through all data in Redis
-        # then push all data to Postgres
-        while True:
-            if self.connection.ttl('timer') == -2:
-                data = self.get_all_users()
-                for id, user in data.items():
-                    name = user['name']
-                    address = user['address']
-                    phonenum = user['phonenum']
-                    self.update_user_to_database(id, name, address, phonenum)
-                # reset timer
-                self.connection.set('timer', 'update')
-                self.connection.expire('timer', 60)
-            else:
-                break
-        pass
+        print(f'Cache Server is running on port {self.port}')
+        print('Listening for changes...')
+
+        # create an infinite loop to check if there is any change in Redis
+        # the timer is set to 20s
+        def server_loop():
+            while True:
+                if self.connection.ttl('timer') == -2:
+                    data = self.get_all_users_from_redis()
+                    self.update_user_to_database(data)
+                
+                    if self.close_server == True:
+                        self.end_connection()
+                        break
+
+                    # reset timer
+                    self.connection.set('timer', 'update')
+                    self.connection.expire('timer', 20)
+
+        def end_server():
+            # check for user input to break out the previous loop
+            user_input = input('Press any key to stop the server: ')
+            if user_input:
+                self.close_server = True
+
+        # create a thread to run the server loop
+        server_thread = threading.Thread(target=server_loop)
+        server_thread.start()
+
+        # create a thread to run get the ending signal
+        end_signal = threading.Thread(target=end_server)
+        end_signal.start()
+        
+
+    def end_connection(self):
+        database.close_connection()
+        self.delete_cache()
+        self.connection.close()
+        print('Server stopped')
 
 redis_client = ConnectToRedis()
 
 if __name__ == "__main__":
-    all_data = redis_client.get_all_users()
-    print(all_data)
-    # redis_client.update_data()
+    redis_client.update_data()
 
