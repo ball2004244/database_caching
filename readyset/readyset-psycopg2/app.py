@@ -2,8 +2,9 @@
 
 import logging
 import os
-from argparse import ArgumentParser, RawTextHelpFormatter
 import psycopg2
+from argparse import ArgumentParser, RawTextHelpFormatter
+from database import ConnectToPostgres
 
 def query(conn):
     with conn.cursor() as cur:
@@ -50,17 +51,30 @@ def parse_cmdline():
     parser.add_argument("-v", "--verbose",
                         action="store_true", help="print debug info")
 
+    # parser.add_argument("dsn",
+    #                     default=os.environ.get("DATABASE_URL"),
+    #                     nargs="?",
+    #                     help="""database connection string
+    #                     (default: value of the DATABASE_URL env variable)"""
+    # )
+
     parser.add_argument("dsn",
-                        default=os.environ.get("DATABASE_URL"),
+                        default="postgresql://postgres:readyset@127.0.0.1:5433/imdb?sslmode=disable",
                         nargs="?",
                         help="""database connection string
                         (default: value of the DATABASE_URL env variable)"""
     )
+    
 
     opt = parser.parse_args()
     if opt.dsn is None:
         parser.error("database connection string not set")
     return opt
 
+
+
+
 if __name__ == "__main__":
-    main()
+    # main()
+    db = ConnectToPostgres()
+    print(db)
