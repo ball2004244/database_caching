@@ -1,0 +1,8 @@
+SELECT title_basics.originaltitle, title_ratings.averagerating
+            FROM title_basics
+            JOIN title_ratings ON title_basics.tconst = title_ratings.tconst
+            WHERE title_basics.startyear >= 1950
+            AND title_basics.startyear <= 2010
+            AND title_basics.titletype = 'movie'
+            AND title_ratings.numvotes > 50000
+            ORDER BY title_ratings.averagerating DESC LIMIT 10;
